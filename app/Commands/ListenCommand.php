@@ -1,16 +1,20 @@
 <?php
 
-namespace Crow\Listen\Commands;
+namespace App\Commands;
 
-use Crow\Listen\CrowApiClient;
-use Crow\Listen\EventFormatter;
-use Crow\Listen\ListenerServer;
-use Illuminate\Console\Command;
+use App\Commands\Concerns\ResolvesCrowApiOptions;
+use App\Support\CrowApiClient;
+use App\Support\CrowConfig;
+use App\Support\EventFormatter;
+use App\Support\ListenerServer;
 use Illuminate\Support\Str;
+use LaravelZero\Framework\Commands\Command;
 
-class CrowListenCommand extends Command
+class ListenCommand extends Command
 {
-    protected $signature = 'crow:listen
+    use ResolvesCrowApiOptions;
+
+    protected $signature = 'listen
         {--host= : Host to bind}
         {--port= : Port to bind}
         {--public-url= : Public tunnel URL Crow can call}
@@ -18,16 +22,21 @@ class CrowListenCommand extends Command
         {--events=* : Event types to receive}
         {--json : Print raw JSON instead of markdown}
         {--leave-unread : Do not mark events read after output}
-        {--no-register : Start local listener without registering with Crow}';
+        {--no-register : Start local listener without registering with Crow}
+        {--api-url= : Crow API URL}
+        {--api-token= : Crow API token}';
 
     protected $description = 'Listen for live Crow events forwarded to this machine';
 
-    public function handle(CrowApiClient $client, EventFormatter $formatter, ListenerServer $server): int
+    protected $aliases = ['crow:listen'];
+
+    public function handle(CrowApiClient $client, CrowConfig $config, EventFormatter $formatter, ListenerServer $server): int
     {
-        $host = (string) ($this->option('host') ?: config('crow-listen.host', '127.0.0.1'));
-        $port = (int) ($this->option('port') ?: config('crow-listen.port', 8787));
-        $publicUrl = $this->option('public-url') ?: config('crow-listen.public_url');
-        $secret = (string) (config('crow-listen.listener_secret') ?: Str::random(48));
+        $client = $this->clientWithOptions($client);
+        $host = $config->host($this->stringOption('host'));
+        $port = $config->port($this->stringOption('port'));
+        $publicUrl = $config->publicUrl($this->stringOption('public-url'));
+        $secret = $config->listenerSecret() ?: Str::random(48);
         $listenerId = null;
 
         if (! $this->option('no-register')) {
@@ -40,7 +49,7 @@ class CrowListenCommand extends Command
                 return self::FAILURE;
             }
 
-            $registration = $client->registerListener(rtrim((string) $publicUrl, '/'), $this->appId(), $this->events(), $secret);
+            $registration = $client->registerListener(rtrim($publicUrl, '/'), $config->appId($this->stringOption('app-id')), $this->events(), $secret);
             $listenerId = $registration['id'] ?? null;
             $this->info('Registered Crow listener #'.$listenerId.' for '.$publicUrl);
         }
@@ -64,13 +73,6 @@ class CrowListenCommand extends Command
         }
 
         return self::SUCCESS;
-    }
-
-    private function appId(): ?int
-    {
-        $value = $this->option('app-id') ?: config('crow-listen.app_id');
-
-        return is_numeric($value) ? (int) $value : null;
     }
 
     /** @return array<int, string> */

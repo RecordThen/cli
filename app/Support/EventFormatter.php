@@ -1,6 +1,6 @@
 <?php
 
-namespace Crow\Listen;
+namespace App\Support;
 
 class EventFormatter
 {

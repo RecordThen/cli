@@ -1,139 +1,231 @@
 # Crow CLI
 
-This repository contains `crowbot/listen`, a Laravel package that lets a local
-developer or agent read Crow handoff events from the command line.
+Crow CLI is a standalone command-line companion for Crow developer handoffs. It reads queued Crow events, listens for live forwarded events, and fetches implementation-plan handoffs in formats that are ready to paste into an AI coding agent or use directly in a terminal workflow.
 
-It provides two Artisan commands:
+The app is built with [Laravel Zero](https://laravel-zero.com/) and ships as a PHAR-backed `crow` executable.
 
-- `crow:read`: fetch one unread Crow event and print an AI-agent-ready brief.
-- `crow:listen`: run a local HTTP listener for live Crow events forwarded from
-  the Crow API.
+## Installation
 
-The package is required by `crow-api` as `crowbot/listen`.
-
-## Requirements
-
-- PHP 8.2+
-- Composer
-- A Crow API token with access to listener events
-- A running Crow API, usually `https://crow.test/api/v1`
-- expose.dev or another tunnel if using live push delivery with `crow:listen`
-
-## Install In A Laravel App
-
-Require the package through Composer. In the local Crow workspace, the API uses
-the package as a path/dev dependency.
-
-Publish config when needed:
+Once the package is published, install it globally with Composer:
 
 ```bash
-php artisan vendor:publish --tag=crow-listen-config
+composer global require crowbot/cli
 ```
 
-Configure environment variables:
-
-```dotenv
-CROW_API_URL=https://crow.test/api/v1
-CROW_API_TOKEN=your-sanctum-token
-CROW_APP_ID=
-CROW_LISTEN_PUBLIC_URL=
-CROW_LISTEN_SECRET=
-CROW_LISTEN_HOST=127.0.0.1
-CROW_LISTEN_PORT=8787
-```
-
-Required:
-
-- `CROW_API_URL`: Crow API base. The package appends `/api/v1` if missing.
-- `CROW_API_TOKEN`: bearer token used for API requests.
-
-Optional:
-
-- `CROW_APP_ID`: limit reads/listeners to a Crow app.
-- `CROW_LISTEN_PUBLIC_URL`: public tunnel URL Crow can call for live events.
-- `CROW_LISTEN_SECRET`: fixed signing secret for listener webhooks. If omitted,
-  `crow:listen` generates a temporary secret.
-- `CROW_LISTEN_HOST` and `CROW_LISTEN_PORT`: local listener bind address.
-
-## Read Events
-
-Fetch the latest unread event:
+Make sure Composer's global bin directory is on your `PATH`, then verify the install:
 
 ```bash
-php artisan crow:read
+crow list
 ```
 
-Fetch a specific event:
-
-```bash
-php artisan crow:read EVENT_ID
-```
-
-Filter by app or event type:
-
-```bash
-php artisan crow:read --app-id=1 --events=recon.ready
-```
-
-Print raw JSON and leave the event unread:
-
-```bash
-php artisan crow:read --json --leave-unread
-```
-
-## Listen For Live Events
-
-Start a local listener and register it with Crow:
-
-```bash
-expose share --subdomain=your-name --server=us-2 http://127.0.0.1:8787
-CROW_LISTEN_PUBLIC_URL=https://your-name.us-2.sharedwithexpose.com php artisan crow:listen
-```
-
-Run without registering, useful for local webhook tests:
-
-```bash
-php artisan crow:listen --no-register --port=8787
-```
-
-Health endpoint:
-
-```text
-GET /health
-```
-
-Event endpoint:
-
-```text
-POST /crow/events
-```
-
-Live events are signed with:
-
-```text
-X-Crow-Timestamp
-X-Crow-Signature
-```
-
-The signature is `hash_hmac('sha256', timestamp + "." + body, secret)`.
-
-## Local Package Development
-
-From this package directory:
+For local development from this repository:
 
 ```bash
 composer install
-vendor/bin/phpunit
+php crow list
 ```
 
-Useful files:
+The checked-in PHAR build is available at:
 
-- `src/Commands/CrowReadCommand.php`: one-shot event fetch command.
-- `src/Commands/CrowListenCommand.php`: live listener command.
-- `src/CrowApiClient.php`: Crow API wrapper.
-- `src/ListenerServer.php`: small local HTTP listener.
-- `src/EventFormatter.php`: markdown/JSON output formatting.
-- `config/crow-listen.php`: environment-backed config.
+```bash
+./builds/crow list
+```
 
-When changing package behavior through the `api/` app, run the API's relevant
-tests as well as this package's PHPUnit suite.
+## Authentication
+
+Run the login command:
+
+```bash
+crow auth login
+```
+
+The CLI prints the API-token page URL, attempts to open it in your browser, then prompts for the token. If your terminal supports clickable links, you can also open the printed URL directly.
+
+Credentials are stored at:
+
+```text
+<project>/.crow/config.json
+```
+
+When you run `crow auth login` from inside a project, the CLI writes credentials to that project's `.crow/config.json`. This lets different projects use different Crow accounts and API tokens. If no project root can be detected, credentials fall back to the global config at `~/.crow/config.json`.
+
+Use `--global` when you intentionally want shared credentials:
+
+```bash
+crow auth login --global
+```
+
+Config files are written with restrictive permissions where the platform supports it. Environment variables remain supported for automation and CI.
+
+Configuration precedence is:
+
+1. Explicit command options, such as `--api-token` or `--api-url`
+2. Environment variables
+3. The nearest project config discovered by walking upward from the current directory: `.crow/config.json`
+4. Global config: `~/.crow/config.json`
+5. Built-in defaults
+
+Supported environment variables:
+
+```bash
+CROW_API_URL=https://crow.test/api/v1
+CROW_API_TOKEN=your_token_here
+CROW_APP_ID=
+CROW_LISTEN_PUBLIC_URL=
+CROW_LISTEN_HOST=127.0.0.1
+CROW_LISTEN_PORT=8787
+CROW_LISTEN_SECRET=
+```
+
+The current default API URL is `https://crow.test/api/v1`.
+
+For automation or headless environments, pass the token and skip browser launch:
+
+```bash
+crow auth login --api-token=your_token_here --no-browser
+```
+
+To point one command at a specific config file, set `CROW_CONFIG_PATH`:
+
+```bash
+CROW_CONFIG_PATH=/path/to/.crow/config.json crow plan
+```
+
+## Commands
+
+### Fetch Implementation Plans
+
+List active implementation plans:
+
+```bash
+crow plan
+```
+
+Fetch a specific plan handoff:
+
+```bash
+crow plan <plan-id>
+```
+
+Print raw JSON:
+
+```bash
+crow plan <plan-id> --json
+```
+
+Write output to a file:
+
+```bash
+crow plan <plan-id> --output=handoff.md
+```
+
+### Read Crow Events
+
+Read the latest unread event:
+
+```bash
+crow read
+```
+
+Read a specific event:
+
+```bash
+crow read <event-id>
+```
+
+Leave the event unread after printing:
+
+```bash
+crow read <event-id> --leave-unread
+```
+
+Filter unread lookup by app or event types:
+
+```bash
+crow read --app-id=123 --events=dispatch.received --events=recon.ready
+```
+
+### Listen For Live Events
+
+Start a local listener:
+
+```bash
+crow listen --public-url=https://your-public-url.example
+```
+
+The listener binds to `127.0.0.1:8787` by default and receives events at:
+
+```text
+POST /crow/events
+GET /health
+```
+
+Override the bind address:
+
+```bash
+crow listen --host=127.0.0.1 --port=8787
+```
+
+Start the listener without registering it with Crow:
+
+```bash
+crow listen --no-register
+```
+
+When registering with Crow, expose the local listener first and set `CROW_LISTEN_PUBLIC_URL` or pass `--public-url`.
+
+## Compatibility Aliases
+
+The old Artisan-style command names are still available as aliases:
+
+```bash
+crow crow:plan
+crow crow:read
+crow crow:listen
+```
+
+The preferred CLI interface is:
+
+```bash
+crow plan
+crow read
+crow listen
+```
+
+## Development
+
+Install dependencies:
+
+```bash
+composer install
+```
+
+Run the test suite:
+
+```bash
+composer test
+```
+
+Inspect available commands:
+
+```bash
+php crow list
+```
+
+Build the PHAR:
+
+```bash
+php crow app:build crow --build-version=unreleased
+```
+
+Smoke-test the built artifact:
+
+```bash
+./builds/crow plan --help
+```
+
+## Release Notes
+
+This repository is now the standalone Crow CLI. It is no longer a Laravel installable package that auto-registers Artisan commands inside a host application.
+
+For Packagist distribution, `composer.json` points its `bin` entry at `builds/crow`, so release builds should include a fresh PHAR artifact.
