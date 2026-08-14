@@ -1,60 +1,98 @@
-# Laravel Zero CLI Migration Plan
+# Crow CLI Implementation
 
-## Summary
+This is the canonical implementation status and backlog for the standalone
+Laravel Zero `crow` CLI.
 
-Convert this repo in place from a Laravel package into a Laravel Zero 12 standalone CLI named `crow`, with Composer package identity `crowbot/cli`. The primary UX becomes PHAR-first distribution through Packagist, short commands like `crow plan`, and a new `crow auth login` setup flow.
+Status labels:
 
-Use the current Laravel Zero docs path: `composer create-project` style skeleton, commands in `app/Commands`, config in `config`, PHAR builds via `php crow app:build crow`, and Packagist PHAR bin behavior from the PHAR distribution docs.
+- `[x]` Done in source or documented evidence.
+- `[~]` Partially done, modeled, or not fully verified.
+- `[ ]` Not done.
 
-## Key Changes
+## Current Read
 
-- Replace package scaffolding with Laravel Zero app scaffolding:
-  - `composer.json` becomes a Laravel Zero project using `laravel-zero/framework:^12`.
-  - Rename app executable to `crow`.
-  - Set Composer package name to `crowbot/cli`.
-  - Remove Laravel package auto-discovery and `CrowListenServiceProvider`.
-  - Add `box.json`, `bootstrap/app.php`, Laravel Zero `config/app.php`, and `config/commands.php`.
-- Move reusable code into app namespace:
-  - Existing commands become Laravel Zero commands under `app/Commands`.
-  - Existing client, formatter, and listener classes move under `app/Support` or equivalent `App\...` namespace.
-  - Keep behavior of current `plan`, `read`, and `listen` flows unless explicitly changed below.
-- Command UX:
-  - Primary commands are `crow plan`, `crow read`, and `crow listen`.
-  - Add hidden/compat aliases for `crow:plan`, `crow:read`, and `crow:listen` where Laravel command aliasing allows it.
-  - Update command output that currently says `php artisan crow:plan <plan-id>` to say `crow plan <plan-id>`.
-- Auth/config:
-  - Add `crow auth login`.
-  - Prompt for API token and optional API URL.
-  - Store credentials in `~/.crow/config.json` with restrictive permissions where supported.
-  - Config precedence: explicit command option, environment variable, `~/.crow/config.json`, then default config.
-  - Keep default API URL as the current `https://crow.test/api/v1`.
-  - Preserve existing env vars like `CROW_API_TOKEN`, `CROW_API_URL`, `CROW_APP_ID`, and listener options for automation.
-- PHAR-first distribution:
-  - Build artifact name is `builds/crow`.
-  - Composer `bin` points to `builds/crow` for release/Packagist distribution.
-  - Move Laravel Zero runtime dependencies to the release model recommended by the docs for PHAR Packagist installs.
-  - Include Laravel Zero `dotenv` and `http` components so HTTP and adjacent `.env` files work in PHAR usage.
+The Laravel Zero migration is complete in source. This repository is a
+standalone CLI app named `crow`, with command code under `app/Commands`, support
+code under `app/Support`, PHAR configuration, a checked-in `builds/crow`
+artifact, and feature tests for the primary command flows.
 
-## Test Plan
+The remaining work is release confidence: refresh the PHAR before publication,
+verify Packagist/global Composer installation, decide the production default API
+URL, and add release smoke evidence.
 
-- Port current PHPUnit/Testbench command tests to Laravel Zero app tests.
-- Cover:
-  - `crow plan` lists plans and prints `crow plan <plan-id>`.
-  - `crow plan <id>` outputs markdown/json and handles API failures.
-  - `crow read` fetches latest or by ID and respects `--leave-unread`.
-  - `crow listen` preserves listener registration/no-register behavior.
-  - `crow auth login` writes `~/.crow/config.json` and command config reads it.
-  - Env vars override stored config.
-  - Hidden compatibility aliases still execute the same command behavior.
-- Add build verification:
-  - `composer test` or equivalent test command passes.
-  - `php crow list` shows the expected commands.
-  - `php crow app:build crow --build-version=<version>` creates `builds/crow`.
-  - `./builds/crow plan --help` runs successfully.
+## Done
 
-## Assumptions
+- [x] Converted the repository from a Laravel package into a Laravel Zero 12
+  project.
+- [x] Composer package identity is `crowbot/cli`.
+- [x] The executable entrypoint is `crow`.
+- [x] Composer `bin` points at `builds/crow` for PHAR-backed distribution.
+- [x] Added Laravel Zero app scaffolding: `bootstrap/app.php`, `config/app.php`,
+  `config/commands.php`, `box.json`, and app/service-provider wiring.
+- [x] Moved runtime code into the app namespace under `app/Commands` and
+  `app/Support`.
+- [x] Implemented `crow plan` for listing implementation-plan handoffs, fetching
+  a specific plan, JSON output, and file output.
+- [x] Implemented `crow read` for latest/specific event reads, unread handling,
+  app filtering, and event-type filters.
+- [x] Implemented `crow listen` with listener registration, `--no-register`,
+  host/port/public URL options, shared secret support, `/crow/events`, and
+  `/health`.
+- [x] Implemented `crow auth login` with browser launch, token prompt,
+  `--api-url`, `--api-token`, `--global`, and `--no-browser`.
+- [x] Credentials are written to the nearest project `.crow/config.json` by
+  default, with `~/.crow/config.json` used for `--global` or when no project
+  root is found.
+- [x] Config precedence is explicit option, environment, project config, global
+  config, then built-in default.
+- [x] Restrictive config directory/file permissions are attempted where the
+  platform supports them.
+- [x] Existing automation environment variables are preserved, including
+  `CROW_API_URL`, `CROW_API_TOKEN`, `CROW_APP_ID`, listener URL/host/port, and
+  listener secret.
+- [x] Hidden compatibility command names are available for `crow:plan`,
+  `crow:read`, and `crow:listen`.
+- [x] Feature and unit tests cover plan, read, listen, auth login, config
+  precedence, listener behavior, aliases, and API failures.
 
-- This repo stops being a Laravel installable package and becomes only the standalone CLI.
-- v1 does not add native single-file binaries; PHAR is the release artifact.
-- `crow auth login` is the only new auth command for this migration; logout/status can be added later.
-- Production still defaults to `https://crow.test/api/v1` until a different URL is provided.
+## Partial
+
+- [~] A PHAR artifact exists at `builds/crow`, but it should be rebuilt and
+  smoke-tested from the release commit before publication.
+- [~] The default API URL remains `https://crow.test/api/v1`; production release
+  should either change it or document the required user override.
+- [~] Packagist/Composer global installation is documented, but a dated
+  install-from-package smoke report is not recorded here.
+- [~] `auth login` exists, but logout/status commands are still future
+  ergonomics work.
+
+## Not Done
+
+- [ ] Publish and verify a Packagist/global Composer install.
+- [ ] Add dated release smoke evidence for `builds/crow`.
+- [ ] Add `crow auth logout`.
+- [ ] Add `crow auth status`.
+- [ ] Decide and document the production default API URL before public release.
+- [ ] Native single-file binaries outside PHAR distribution.
+
+## Next Priority
+
+1. Rebuild the PHAR from a clean release commit with
+   `php crow app:build crow --build-version=<version>`.
+2. Smoke-test `./builds/crow list`, `./builds/crow plan --help`, auth login
+   with `--no-browser`, and one real API-backed plan/read command.
+3. Publish or dry-run Packagist installation and verify `composer global require
+   crowbot/cli` exposes `crow`.
+4. Decide whether the public default API URL should remain `crow.test`, move to
+   production, or require explicit setup.
+5. Add `auth status` and `auth logout` after release packaging is verified.
+
+## Verification Needed
+
+- [ ] `composer test`
+- [ ] `php crow list`
+- [ ] `php crow app:build crow --build-version=<version>`
+- [ ] `./builds/crow plan --help`
+- [ ] `./builds/crow auth login --api-token=<token> --no-browser`
+- [ ] `composer global require crowbot/cli` from a published or local package
+  source.
